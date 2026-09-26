@@ -1,26 +1,27 @@
 import { getEventById, isPastEvent } from './events'
+import { getUserById } from './auth'
 
-// Seed data for registrations, so the "My Registrations" and Organizer
-// pages have something real to display before participants build the
-// actual registration flow (Task 2 and Task 3).
-
-export type RegistrationStatus = 'confirmed' | 'cancelled'
+export type RegistrationStatus = 'confirmed' | 'cancelled' | 'disqualified'
 
 export interface Registration {
   id: string
+  ticketId: string // Automated unique ticket ID, e.g. CC-E01-9F2D
   eventId: string
   studentId: string
   status: RegistrationStatus
   registeredAt: string // ISO date string
 }
 
+export interface AttendeeDetail extends Registration {
+  studentName: string
+  studentEmail: string
+}
+
 // NOTE FOR PARTICIPANTS: this array is the "database" of registrations.
-// Task 2 (Registration) means pushing new items into this array when a
-// student registers. Task 3 (Cancellation) means updating an item's
-// status here. Keep using this same array — don't create a second store.
 export const registrations: Registration[] = [
   {
     id: 'reg-01',
+    ticketId: 'CC-E01-984A',
     eventId: 'evt-01',
     studentId: 'stu-1',
     status: 'confirmed',
@@ -28,6 +29,7 @@ export const registrations: Registration[] = [
   },
   {
     id: 'reg-02',
+    ticketId: 'CC-E04-712C',
     eventId: 'evt-04',
     studentId: 'stu-1',
     status: 'confirmed',
@@ -35,6 +37,7 @@ export const registrations: Registration[] = [
   },
   {
     id: 'reg-03',
+    ticketId: 'CC-E09-335B',
     eventId: 'evt-09',
     studentId: 'stu-1',
     status: 'confirmed',
@@ -54,6 +57,12 @@ export function getActiveRegistrationsForStudent(studentId: string): Registratio
     const event = getEventById(reg.eventId)
     return !!event && !event.cancelled
   })
+}
+
+function generateTicketId(eventId: string): string {
+  const eventCode = eventId.replace('evt-', 'E').toUpperCase()
+  const randomSuffix = Math.random().toString(36).substring(2, 6).toUpperCase()
+  return `CC-${eventCode}-${randomSuffix}`
 }
 
 export function registerStudentForEvent(
@@ -96,6 +105,7 @@ export function registerStudentForEvent(
 
   const newReg: Registration = {
     id: `reg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+    ticketId: generateTicketId(eventId),
     eventId,
     studentId,
     status: 'confirmed',
@@ -133,3 +143,54 @@ export function cancelRegistration(
   return reg
 }
 
+/**
+ * Organizer power: Disqualify or remove an attendee from an event.
+ * Reallocates the released seat back to the event.
+ */
+export function disqualifyAttendee(
+  registrationId: string,
+  organizerId: string,
+): Registration {
+  const reg = registrations.find((r) => r.id === registrationId)
+  if (!reg) {
+    throw new Error('Registration not found')
+  }
+
+  const event = getEventById(reg.eventId)
+  if (!event) {
+    throw new Error('Associated event not found')
+  }
+
+  if (event.organizerId !== organizerId) {
+    throw new Error('Unauthorized: only the event organizer can disqualify attendees')
+  }
+
+  if (reg.status === 'disqualified') {
+    throw new Error('Attendee is already disqualified')
+  }
+
+  // If was confirmed, free the seat
+  if (reg.status === 'confirmed') {
+    event.seatsAvailable = Math.min(event.capacity, event.seatsAvailable + 1)
+  }
+
+  reg.status = 'disqualified'
+  return reg
+}
+
+/**
+ * Get all attendees for an event, safely including student details
+ * without ever exposing passwords.
+ */
+export function getEventAttendees(eventId: string): AttendeeDetail[] {
+  const eventRegistrations = registrations.filter((r) => r.eventId === eventId)
+
+  return eventRegistrations.map((reg) => {
+    const user = getUserById(reg.studentId)
+    return {
+      ...reg,
+      studentName: user ? user.name : 'Unknown Student',
+      studentEmail: user ? user.email : 'N/A',
+    }
+  })
+}

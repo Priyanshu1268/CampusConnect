@@ -4,16 +4,21 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAuth } from './AuthProvider'
 
-const LINKS = [
-  { href: '/', label: 'Home' },
-  { href: '/events', label: 'Events' },
-  { href: '/registrations', label: 'My Registrations' },
-  { href: '/organizer', label: 'Organizer' },
-]
-
 export default function Navbar() {
   const pathname = usePathname()
-  const { currentUser, setCurrentUserId, allUsers } = useAuth()
+  const { currentUser, logout } = useAuth()
+
+  // Dynamic navigation links based on authentication and role
+  const navLinks = [
+    { href: '/', label: 'Home' },
+    { href: '/events', label: 'Events' },
+    ...(currentUser && currentUser.role === 'student'
+      ? [{ href: '/registrations', label: 'My Registrations' }]
+      : []),
+    ...(currentUser && currentUser.role === 'organizer'
+      ? [{ href: '/organizer', label: 'Organizer Console' }]
+      : []),
+  ]
 
   return (
     <header
@@ -31,7 +36,7 @@ export default function Navbar() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          gap: 20,
+          gap: 16,
           height: 68,
         }}
       >
@@ -40,14 +45,14 @@ export default function Navbar() {
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: 8,
+            gap: 10,
             textDecoration: 'none',
           }}
         >
           <span
             style={{
-              width: 10,
-              height: 10,
+              width: 12,
+              height: 12,
               borderRadius: '50%',
               background: 'var(--amber)',
               display: 'inline-block',
@@ -57,7 +62,7 @@ export default function Navbar() {
             style={{
               fontFamily: 'var(--font-display)',
               fontWeight: 700,
-              fontSize: 18,
+              fontSize: 19,
               color: 'var(--ink)',
             }}
           >
@@ -67,10 +72,7 @@ export default function Navbar() {
 
         <nav aria-label="Primary">
           <ul style={{ display: 'flex', gap: 4 }}>
-            {LINKS.filter(
-              (link) =>
-                link.href !== '/organizer' || currentUser.role === 'organizer',
-            ).map((link) => {
+            {navLinks.map((link) => {
               const active =
                 link.href === '/'
                   ? pathname === '/'
@@ -98,38 +100,46 @@ export default function Navbar() {
           </ul>
         </nav>
 
-        <label
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            fontSize: 13,
-            color: 'var(--ink-soft)',
-          }}
-        >
-          <span className="eyebrow-tag" style={{ whiteSpace: 'nowrap' }}>
-            {currentUser.role}
-          </span>
-          <select
-            aria-label="Switch current user"
-            value={currentUser.id}
-            onChange={(e) => setCurrentUserId(e.target.value)}
-            style={{
-              border: '1.5px solid var(--line)',
-              borderRadius: 'var(--radius)',
-              padding: '6px 8px',
-              fontSize: 13.5,
-              background: 'var(--paper-raised)',
-              color: 'var(--ink)',
-            }}
-          >
-            {allUsers.map((user) => (
-              <option key={user.id} value={user.id}>
-                {user.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {currentUser ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span className="eyebrow-tag" style={{ textTransform: 'capitalize' }}>
+                {currentUser.role}
+              </span>
+              <span
+                style={{
+                  fontSize: 13.5,
+                  fontWeight: 600,
+                  color: 'var(--ink)',
+                  maxWidth: 120,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+                title={currentUser.name}
+              >
+                {currentUser.name}
+              </span>
+              <button
+                type="button"
+                onClick={logout}
+                className="btn btn-secondary"
+                style={{ padding: '6px 12px', fontSize: 13 }}
+                title="Log out of your account"
+              >
+                Log out
+              </button>
+            </div>
+          ) : (
+            <Link
+              href="/login"
+              className="btn btn-primary"
+              style={{ padding: '7px 16px', fontSize: 13.5 }}
+            >
+              Sign In
+            </Link>
+          )}
+        </div>
       </div>
     </header>
   )
