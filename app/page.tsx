@@ -9,7 +9,7 @@ export default function HomePage() {
     .slice(0, 4)
 
   const venueCount = new Set(events.map((e) => e.venue)).size
-  const upcomingCount = events.filter((e) => !isPastEvent(e)).length
+  const upcomingCount = events.filter((e) => !isPastEvent(e) && !e.cancelled).length
 
   return (
     <>

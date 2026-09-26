@@ -248,8 +248,13 @@ export function searchEventsByName(
   eventList: CampusEvent[],
   query: string,
 ): CampusEvent[] {
-  // TODO(participant): implement case-insensitive partial name search.
-  return eventList
+  const trimmed = query.trim().toLowerCase()
+  if (!trimmed) {
+    return eventList
+  }
+  return eventList.filter((event) =>
+    event.name.toLowerCase().includes(trimmed),
+  )
 }
 
 /**
@@ -263,6 +268,108 @@ export function filterEventsByCategory(
   eventList: CampusEvent[],
   category: EventCategory | 'All',
 ): CampusEvent[] {
-  // TODO(participant): implement category filtering.
-  return eventList
+  if (!category || category === 'All') {
+    return eventList
+  }
+  return eventList.filter((event) => event.category === category)
+}
+
+export interface CreateEventInput {
+  name: string
+  description: string
+  date: string
+  venue: string
+  category: EventCategory
+  capacity: number
+  organizerId: string
+}
+
+export function validateEventInput(data: Partial<CreateEventInput>, isEdit = false): void {
+  if (data.name !== undefined && (!data.name || !data.name.trim())) {
+    throw new Error('Event name is required')
+  }
+  if (data.venue !== undefined && (!data.venue || !data.venue.trim())) {
+    throw new Error('Venue is required')
+  }
+  if (data.date !== undefined) {
+    const eventDate = new Date(data.date)
+    if (isNaN(eventDate.getTime())) {
+      throw new Error('Invalid date')
+    }
+    if (eventDate.getTime() <= TODAY.getTime()) {
+      throw new Error('Event date must be in the future')
+    }
+  }
+  if (data.capacity !== undefined) {
+    if (!Number.isInteger(data.capacity) || data.capacity <= 0) {
+      throw new Error('Capacity must be a positive integer')
+    }
+  }
+}
+
+export function createEvent(input: CreateEventInput): CampusEvent {
+  validateEventInput(input)
+  const newId = `evt-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`
+  const newEvent: CampusEvent = {
+    id: newId,
+    name: input.name.trim(),
+    description: (input.description || '').trim(),
+    date: input.date,
+    venue: input.venue.trim(),
+    category: input.category,
+    capacity: input.capacity,
+    seatsAvailable: input.capacity,
+    organizerId: input.organizerId,
+    cancelled: false,
+  }
+  events.push(newEvent)
+  return newEvent
+}
+
+export function updateEvent(
+  id: string,
+  organizerId: string,
+  updates: Partial<Omit<CampusEvent, 'id' | 'organizerId'>>,
+): CampusEvent {
+  const event = getEventById(id)
+  if (!event) {
+    throw new Error('Event not found')
+  }
+  if (event.organizerId !== organizerId) {
+    throw new Error('Unauthorized: only the event organizer can modify this event')
+  }
+
+  validateEventInput(updates, true)
+
+  if (updates.capacity !== undefined && updates.capacity !== event.capacity) {
+    const bookedSeats = event.capacity - event.seatsAvailable
+    if (updates.capacity < bookedSeats) {
+      throw new Error(
+        `Capacity cannot be less than current registrations (${bookedSeats})`,
+      )
+    }
+    event.seatsAvailable = updates.capacity - bookedSeats
+    event.capacity = updates.capacity
+  }
+
+  if (updates.name !== undefined) event.name = updates.name.trim()
+  if (updates.description !== undefined) event.description = updates.description.trim()
+  if (updates.date !== undefined) event.date = updates.date
+  if (updates.venue !== undefined) event.venue = updates.venue.trim()
+  if (updates.category !== undefined) event.category = updates.category
+  if (updates.cancelled !== undefined) event.cancelled = updates.cancelled
+
+  return event
+}
+
+export function cancelEvent(id: string, organizerId: string): CampusEvent {
+  const event = getEventById(id)
+  if (!event) {
+    throw new Error('Event not found')
+  }
+  if (event.organizerId !== organizerId) {
+    throw new Error('Unauthorized: only the event organizer can cancel this event')
+  }
+  event.cancelled = true
+  return event
 }

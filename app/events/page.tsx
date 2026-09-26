@@ -1,8 +1,16 @@
 'use client'
 
-import { useState } from 'react'
-import { events, EventCategory } from '@/data/events'
+import { useState, useEffect } from 'react'
+import {
+  events as initialEvents,
+  EventCategory,
+  isPastEvent,
+  searchEventsByName,
+  filterEventsByCategory,
+  CampusEvent,
+} from '@/data/events'
 import EventCard from '@/components/EventCard'
+import EmptyState from '@/components/EmptyState'
 
 const CATEGORIES: (EventCategory | 'All')[] = [
   'All',
@@ -14,15 +22,54 @@ const CATEGORIES: (EventCategory | 'All')[] = [
   'Music',
 ]
 
+type SortOption = 'date-asc' | 'date-desc' | 'popularity' | 'seats'
+
 export default function EventsPage() {
-  // PARTICIPANT TASK (Task 1): these two pieces of state exist so the
-  // search box and category dropdown below are usable, but right now
-  // nothing actually reads them — the grid below always renders every
-  // event in `events`. Wire this up to `searchEventsByName` and
-  // `filterEventsByCategory` from data/events.ts, and make the two
-  // compose together.
+  const [eventList, setEventList] = useState<CampusEvent[]>(initialEvents)
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState<EventCategory | 'All'>('All')
+  const [sortBy, setSortBy] = useState<SortOption>('date-asc')
+
+  useEffect(() => {
+    fetch('/api/events?upcoming=true&forStudent=true')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && Array.isArray(data.events)) {
+          setEventList(data.events)
+        }
+      })
+      .catch(() => {
+        // Fallback to in-memory store
+      })
+  }, [])
+
+  // Hide past events and cancelled events from student discovery
+  const upcomingEvents = eventList.filter(
+    (event) => !isPastEvent(event) && !event.cancelled,
+  )
+
+  // Apply search & category filter (composing together)
+  const searched = searchEventsByName(upcomingEvents, query)
+  const filtered = filterEventsByCategory(searched, category)
+
+  // Sort events
+  const sorted = [...filtered].sort((a, b) => {
+    if (sortBy === 'date-asc') {
+      return new Date(a.date).getTime() - new Date(b.date).getTime()
+    }
+    if (sortBy === 'date-desc') {
+      return new Date(b.date).getTime() - new Date(a.date).getTime()
+    }
+    if (sortBy === 'popularity') {
+      const bookedA = a.capacity - a.seatsAvailable
+      const bookedB = b.capacity - b.seatsAvailable
+      return bookedB - bookedA
+    }
+    if (sortBy === 'seats') {
+      return b.seatsAvailable - a.seatsAvailable
+    }
+    return 0
+  })
 
   return (
     <section className="shell" style={{ padding: '40px 0 64px' }}>
@@ -35,7 +82,13 @@ export default function EventsPage() {
       </div>
 
       <div
-        style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 24 }}
+        style={{
+          display: 'flex',
+          gap: 12,
+          flexWrap: 'wrap',
+          marginBottom: 24,
+          alignItems: 'center',
+        }}
       >
         <input
           type="search"
@@ -68,19 +121,56 @@ export default function EventsPage() {
             </option>
           ))}
         </select>
+
+        <select
+          value={sortBy}
+          onChange={(e) => setSortBy(e.target.value as SortOption)}
+          aria-label="Sort events"
+          style={{
+            padding: '10px 14px',
+            border: '1.5px solid var(--line)',
+            borderRadius: 'var(--radius)',
+            fontSize: 14.5,
+            background: 'var(--paper-raised)',
+          }}
+        >
+          <option value="date-asc">Date: Upcoming first</option>
+          <option value="date-desc">Date: Furthest first</option>
+          <option value="popularity">Popularity: Most booked</option>
+          <option value="seats">Seats remaining</option>
+        </select>
       </div>
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-          gap: 16,
-        }}
-      >
-        {events.map((event) => (
-          <EventCard key={event.id} event={event} />
-        ))}
-      </div>
+      {sorted.length === 0 ? (
+        <EmptyState
+          title="No events found"
+          description="Try clearing your search query or picking a different category."
+          action={
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => {
+                setQuery('')
+                setCategory('All')
+              }}
+            >
+              Clear filters
+            </button>
+          }
+        />
+      ) : (
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+            gap: 16,
+          }}
+        >
+          {sorted.map((event) => (
+            <EventCard key={event.id} event={event} />
+          ))}
+        </div>
+      )}
     </section>
   )
 }
