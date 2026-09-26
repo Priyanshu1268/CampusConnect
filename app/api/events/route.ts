@@ -40,7 +40,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { name, description, date, venue, category, capacity, organizerId } = body
+    const { name, description, date, venue, category, capacity, organizerId, imageUrl } = body
 
     if (!organizerId) {
       return NextResponse.json(
@@ -65,6 +65,7 @@ export async function POST(request: Request) {
       category,
       capacity: Number(capacity),
       organizerId,
+      imageUrl,
     })
 
     return NextResponse.json({ success: true, event }, { status: 201 })

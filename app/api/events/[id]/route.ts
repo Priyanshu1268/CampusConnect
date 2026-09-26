@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { updateEvent, cancelEvent, getEventById } from '@/data/events'
 import { getUserById } from '@/data/auth'
+import { countActiveRegistrations } from '@/data/registrations'
 
 export async function GET(
   _request: Request,
@@ -39,12 +40,49 @@ export async function PATCH(
       )
     }
 
-    if (updates.capacity !== undefined) {
-      updates.capacity = Number(updates.capacity)
+    const event = getEventById(params.id)
+    if (!event) {
+      return NextResponse.json(
+        { success: false, error: 'Event not found' },
+        { status: 404 },
+      )
     }
 
-    const event = updateEvent(params.id, organizerId, updates)
-    return NextResponse.json({ success: true, event })
+    if (updates.capacity !== undefined) {
+      const newCapacity = Number(updates.capacity)
+      if (!Number.isInteger(newCapacity) || newCapacity <= 0) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Capacity must be a positive integer',
+            errors: [{ field: 'capacity', message: 'Capacity must be a positive integer' }],
+          },
+          { status: 400 },
+        )
+      }
+
+      const activeCount = countActiveRegistrations(event.id)
+      if (newCapacity < activeCount) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Capacity can't be lower than the ${activeCount} students already registered.`,
+            errors: [
+              {
+                field: 'capacity',
+                message: `Capacity can't be lower than the ${activeCount} students already registered.`,
+              },
+            ],
+          },
+          { status: 400 },
+        )
+      }
+
+      updates.capacity = newCapacity
+    }
+
+    const updatedEvent = updateEvent(params.id, organizerId, updates)
+    return NextResponse.json({ success: true, event: updatedEvent })
   } catch (err: any) {
     const message = err.message || 'Failed to update event'
     const status = message.includes('Unauthorized')

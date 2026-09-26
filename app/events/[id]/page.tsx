@@ -7,6 +7,7 @@ import {
   getEventById,
   isPastEvent,
   isFullEvent,
+  isAlmostFull,
   CampusEvent,
 } from '@/data/events'
 import { registrations } from '@/data/registrations'
@@ -142,7 +143,9 @@ export default function EventDetailPage({
       ? 'past'
       : full
         ? 'full'
-        : 'open'
+        : isAlmostFull(event)
+          ? 'almost-full'
+          : 'open'
 
   const isStudent = currentUser?.role === 'student'
   const canRegister = isStudent && !past && !full && !event.cancelled && !isRegistered && !isDisqualified
@@ -255,6 +258,30 @@ export default function EventDetailPage({
         className="hero-grid"
       >
         <div>
+          {event.imageUrl && (
+            <div
+              style={{
+                marginBottom: 20,
+                borderRadius: 'var(--radius)',
+                overflow: 'hidden',
+                border: '1.5px solid var(--line)',
+                maxHeight: '340px',
+                background: 'var(--paper)',
+              }}
+            >
+              <img
+                src={event.imageUrl}
+                alt={event.name}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  maxHeight: '340px',
+                  objectFit: 'cover',
+                  display: 'block',
+                }}
+              />
+            </div>
+          )}
           <span className="eyebrow-tag">{event.category}</span>
           <h1 style={{ fontSize: 32, marginTop: 12 }}>{event.name}</h1>
           <p style={{ marginTop: 16, fontSize: 15.5 }}>{event.description}</p>

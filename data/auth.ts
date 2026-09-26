@@ -10,7 +10,11 @@ export interface AppUser {
 
 export type SafeUser = Omit<AppUser, 'password'>
 
-export const users: AppUser[] = [
+const globalForAuth = globalThis as unknown as {
+  campusUsers?: AppUser[]
+}
+
+const seedUsers: AppUser[] = [
   {
     id: 'stu-1',
     name: 'Aditi Rao',
@@ -26,6 +30,9 @@ export const users: AppUser[] = [
     role: 'organizer',
   },
 ]
+
+export const users: AppUser[] = globalForAuth.campusUsers ?? seedUsers
+globalForAuth.campusUsers = users
 
 export function getUserById(id: string): AppUser | undefined {
   return users.find((user) => user.id === id)

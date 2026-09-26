@@ -17,8 +17,12 @@ export interface AttendeeDetail extends Registration {
   studentEmail: string
 }
 
+const globalForRegs = globalThis as unknown as {
+  campusRegistrations?: Registration[]
+}
+
 // NOTE FOR PARTICIPANTS: this array is the "database" of registrations.
-export const registrations: Registration[] = [
+const seedRegistrations: Registration[] = [
   {
     id: 'reg-01',
     ticketId: 'CC-E01-984A',
@@ -45,6 +49,10 @@ export const registrations: Registration[] = [
   },
 ]
 
+export const registrations: Registration[] =
+  globalForRegs.campusRegistrations ?? seedRegistrations
+globalForRegs.campusRegistrations = registrations
+
 /** Simple lookup used by the placeholder "My Registrations" page. */
 export function getRegistrationsForStudent(studentId: string): Registration[] {
   return registrations.filter((reg) => reg.studentId === studentId)
@@ -57,6 +65,13 @@ export function getActiveRegistrationsForStudent(studentId: string): Registratio
     const event = getEventById(reg.eventId)
     return !!event && !event.cancelled
   })
+}
+
+/** Count active confirmed registrations for an event */
+export function countActiveRegistrations(eventId: string): number {
+  return registrations.filter(
+    (r) => r.eventId === eventId && r.status === 'confirmed',
+  ).length
 }
 
 function generateTicketId(eventId: string): string {

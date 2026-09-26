@@ -2,6 +2,8 @@ import Link from 'next/link'
 import { events, isPastEvent } from '@/data/events'
 import EventCard from '@/components/EventCard'
 
+export const dynamic = 'force-dynamic'
+
 export default function HomePage() {
   const upcoming = events
     .filter((e) => !isPastEvent(e) && !e.cancelled)

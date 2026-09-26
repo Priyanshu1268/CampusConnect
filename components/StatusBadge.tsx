@@ -1,7 +1,8 @@
-type Status = 'open' | 'full' | 'past' | 'cancelled'
+export type Status = 'open' | 'almost-full' | 'full' | 'past' | 'cancelled'
 
 const COPY: Record<Status, string> = {
   open: 'Open',
+  'almost-full': 'Few seats left',
   full: 'Full',
   past: 'Past',
   cancelled: 'Cancelled',
@@ -9,6 +10,7 @@ const COPY: Record<Status, string> = {
 
 const COLORS: Record<Status, { bg: string; fg: string }> = {
   open: { bg: 'var(--green-bg)', fg: 'var(--green)' },
+  'almost-full': { bg: 'var(--amber-bg)', fg: 'var(--amber-ink)' },
   full: { bg: 'var(--rust-bg)', fg: 'var(--rust)' },
   past: { bg: 'var(--slate-bg)', fg: 'var(--ink-soft)' },
   cancelled: { bg: 'var(--rust-bg)', fg: 'var(--rust)' },

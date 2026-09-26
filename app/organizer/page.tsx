@@ -3,10 +3,19 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useAuth } from '@/components/AuthProvider'
-import { events as initialEvents, CampusEvent, EventCategory, TODAY } from '@/data/events'
+import {
+  events as initialEvents,
+  CampusEvent,
+  EventCategory,
+  TODAY,
+  isPastEvent,
+  isFullEvent,
+  isAlmostFull,
+} from '@/data/events'
 import { AttendeeDetail } from '@/data/registrations'
 import EmptyState from '@/components/EmptyState'
 import StatusBadge from '@/components/StatusBadge'
+import EventForm, { EventFormValues } from '@/components/EventForm'
 
 const CATEGORIES: EventCategory[] = [
   'Tech',
@@ -45,9 +54,6 @@ export default function OrganizerPage() {
   const [loadingAttendees, setLoadingAttendees] = useState(false)
   const [disqualifyingId, setDisqualifyingId] = useState<string | null>(null)
 
-  const [formData, setFormData] = useState<EventFormData>(defaultFormData)
-  const [submitting, setSubmitting] = useState(false)
-  const [formError, setFormError] = useState<string | null>(null)
   const [feedback, setFeedback] = useState<{
     type: 'success' | 'error'
     message: string
@@ -89,30 +95,11 @@ export default function OrganizerPage() {
   const myEvents = eventsList.filter((e) => e.organizerId === currentUser.id)
 
   const openCreateModal = () => {
-    const nextWeek = new Date(TODAY)
-    nextWeek.setDate(nextWeek.getDate() + 7)
-    nextWeek.setHours(10, 0, 0, 0)
-    const isoString = nextWeek.toISOString().slice(0, 16)
-
-    setFormData({
-      ...defaultFormData,
-      date: isoString,
-    })
-    setFormError(null)
     setShowCreateModal(true)
   }
 
   const openEditModal = (event: CampusEvent) => {
     setEditingEvent(event)
-    setFormData({
-      name: event.name,
-      description: event.description,
-      date: event.date.slice(0, 16),
-      venue: event.venue,
-      category: event.category,
-      capacity: event.capacity,
-    })
-    setFormError(null)
   }
 
   const openAttendeesModal = async (event: CampusEvent) => {
@@ -184,35 +171,28 @@ export default function OrganizerPage() {
     }
   }
 
-  const handleCreateSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setSubmitting(true)
-    setFormError(null)
-
+  const handleCreateSubmit = async (values: EventFormValues): Promise<string | null> => {
     try {
-      if (!formData.name.trim()) throw new Error('Event name is required')
-      if (!formData.venue.trim()) throw new Error('Venue is required')
-      if (!formData.date) throw new Error('Date is required')
-      if (new Date(formData.date).getTime() <= TODAY.getTime()) {
-        throw new Error('Event date must be in the future')
+      if (new Date(values.date).getTime() <= TODAY.getTime()) {
+        return 'Event date must be in the future'
       }
-      if (!Number.isInteger(Number(formData.capacity)) || Number(formData.capacity) <= 0) {
-        throw new Error('Capacity must be a positive integer')
+      if (!Number.isInteger(Number(values.capacity)) || Number(values.capacity) <= 0) {
+        return 'Capacity must be a positive integer'
       }
 
       const res = await fetch('/api/events', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...formData,
-          capacity: Number(formData.capacity),
+          ...values,
+          capacity: Number(values.capacity),
           organizerId: currentUser.id,
         }),
       })
 
       const data = await res.json()
       if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Failed to create event')
+        return data.error || 'Failed to create event'
       }
 
       setEventsList((prev) => [data.event, ...prev])
@@ -221,43 +201,34 @@ export default function OrganizerPage() {
         type: 'success',
         message: `Event "${data.event.name}" created successfully!`,
       })
+      return null
     } catch (err: any) {
-      setFormError(err.message || 'Error creating event')
-    } finally {
-      setSubmitting(false)
+      return err.message || 'Error creating event'
     }
   }
 
-  const handleEditSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!editingEvent) return
-    setSubmitting(true)
-    setFormError(null)
+  const handleEditSubmit = async (values: EventFormValues): Promise<string | null> => {
+    if (!editingEvent) return null
 
     try {
-      if (!formData.name.trim()) throw new Error('Event name is required')
-      if (!formData.venue.trim()) throw new Error('Venue is required')
-      if (!formData.date) throw new Error('Date is required')
-      if (new Date(formData.date).getTime() <= TODAY.getTime()) {
-        throw new Error('Event date must be in the future')
+      if (new Date(values.date).getTime() <= TODAY.getTime()) {
+        return 'Event date must be in the future'
       }
-      const newCapacity = Number(formData.capacity)
+      const newCapacity = Number(values.capacity)
       if (!Number.isInteger(newCapacity) || newCapacity <= 0) {
-        throw new Error('Capacity must be a positive integer')
+        return 'Capacity must be a positive integer'
       }
 
       const bookedSeats = editingEvent.capacity - editingEvent.seatsAvailable
       if (newCapacity < bookedSeats) {
-        throw new Error(
-          `Capacity cannot be less than current registrations (${bookedSeats})`,
-        )
+        return `Capacity cannot be less than current registrations (${bookedSeats})`
       }
 
       const res = await fetch(`/api/events/${editingEvent.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...formData,
+          ...values,
           capacity: newCapacity,
           organizerId: currentUser.id,
         }),
@@ -265,7 +236,7 @@ export default function OrganizerPage() {
 
       const data = await res.json()
       if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Failed to update event')
+        return data.error || 'Failed to update event'
       }
 
       setEventsList((prev) =>
@@ -276,10 +247,9 @@ export default function OrganizerPage() {
         type: 'success',
         message: `Event "${data.event.name}" updated successfully!`,
       })
+      return null
     } catch (err: any) {
-      setFormError(err.message || 'Error updating event')
-    } finally {
-      setSubmitting(false)
+      return err.message || 'Error updating event'
     }
   }
 
@@ -392,11 +362,17 @@ export default function OrganizerPage() {
       ) : (
         <ul style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {myEvents.map((event) => {
+            const past = isPastEvent(event)
+            const full = isFullEvent(event)
             const status = event.cancelled
               ? 'cancelled'
-              : event.seatsAvailable <= 0
-                ? 'full'
-                : 'open'
+              : past
+                ? 'past'
+                : full
+                  ? 'full'
+                  : isAlmostFull(event)
+                    ? 'almost-full'
+                    : 'open'
             const bookedCount = event.capacity - event.seatsAvailable
 
             return (
@@ -639,212 +615,40 @@ export default function OrganizerPage() {
       )}
 
       {/* Create / Edit Modal */}
-      {(showCreateModal || editingEvent) && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="event-form-title"
-          style={{
-            position: 'fixed',
-            inset: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 100,
-            padding: 16,
+      {showCreateModal && (
+        <EventForm
+          title="Create New Event"
+          submitLabel="Create Event"
+          initialValues={{
+            date: (() => {
+              const nextWeek = new Date(TODAY)
+              nextWeek.setDate(nextWeek.getDate() + 7)
+              nextWeek.setHours(10, 0, 0, 0)
+              return nextWeek.toISOString().slice(0, 16)
+            })(),
           }}
-        >
-          <div
-            className="card-surface"
-            style={{
-              padding: 28,
-              maxWidth: 520,
-              width: '100%',
-              maxHeight: '90vh',
-              overflowY: 'auto',
-              boxShadow: '0 8px 30px rgba(0,0,0,0.18)',
-            }}
-          >
-            <h2 id="event-form-title" style={{ fontSize: 22, marginBottom: 16 }}>
-              {editingEvent ? 'Edit Event' : 'Create New Event'}
-            </h2>
+          onCancel={() => setShowCreateModal(false)}
+          onSubmit={handleCreateSubmit}
+        />
+      )}
 
-            {formError && (
-              <div
-                role="alert"
-                style={{
-                  marginBottom: 16,
-                  padding: '10px 14px',
-                  borderRadius: 'var(--radius)',
-                  background: 'var(--rust-bg)',
-                  color: 'var(--rust)',
-                  fontSize: 14,
-                }}
-              >
-                {formError}
-              </div>
-            )}
-
-            <form
-              onSubmit={editingEvent ? handleEditSubmit : handleCreateSubmit}
-              style={{ display: 'flex', flexDirection: 'column', gap: 14 }}
-            >
-              <div>
-                <label style={{ display: 'block', fontSize: 13.5, fontWeight: 500, marginBottom: 4 }}>
-                  Event Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    border: '1.5px solid var(--line)',
-                    borderRadius: 'var(--radius)',
-                    fontSize: 14.5,
-                    background: 'var(--paper)',
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: 13.5, fontWeight: 500, marginBottom: 4 }}>
-                  Description
-                </label>
-                <textarea
-                  rows={3}
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    border: '1.5px solid var(--line)',
-                    borderRadius: 'var(--radius)',
-                    fontSize: 14.5,
-                    background: 'var(--paper)',
-                    fontFamily: 'inherit',
-                  }}
-                />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: 13.5, fontWeight: 500, marginBottom: 4 }}>
-                    Category *
-                  </label>
-                  <select
-                    value={formData.category}
-                    onChange={(e) => setFormData({ ...formData, category: e.target.value as EventCategory })}
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      border: '1.5px solid var(--line)',
-                      borderRadius: 'var(--radius)',
-                      fontSize: 14.5,
-                      background: 'var(--paper)',
-                    }}
-                  >
-                    {CATEGORIES.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: 13.5, fontWeight: 500, marginBottom: 4 }}>
-                    Capacity *
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    required
-                    value={formData.capacity}
-                    onChange={(e) => setFormData({ ...formData, capacity: parseInt(e.target.value, 10) || 0 })}
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      border: '1.5px solid var(--line)',
-                      borderRadius: 'var(--radius)',
-                      fontSize: 14.5,
-                      background: 'var(--paper)',
-                    }}
-                  />
-                  {editingEvent && (
-                    <span style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
-                      Current bookings: {editingEvent.capacity - editingEvent.seatsAvailable}
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: 13.5, fontWeight: 500, marginBottom: 4 }}>
-                  Date & Time *
-                </label>
-                <input
-                  type="datetime-local"
-                  required
-                  value={formData.date}
-                  onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    border: '1.5px solid var(--line)',
-                    borderRadius: 'var(--radius)',
-                    fontSize: 14.5,
-                    background: 'var(--paper)',
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: 13.5, fontWeight: 500, marginBottom: 4 }}>
-                  Venue *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.venue}
-                  onChange={(e) => setFormData({ ...formData, venue: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    border: '1.5px solid var(--line)',
-                    borderRadius: 'var(--radius)',
-                    fontSize: 14.5,
-                    background: 'var(--paper)',
-                  }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 12 }}>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  disabled={submitting}
-                  onClick={() => {
-                    setShowCreateModal(false)
-                    setEditingEvent(null)
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={submitting}
-                >
-                  {submitting ? 'Saving…' : editingEvent ? 'Save Changes' : 'Create Event'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+      {editingEvent && (
+        <EventForm
+          title="Edit Event"
+          submitLabel="Save Changes"
+          initialValues={{
+            name: editingEvent.name,
+            description: editingEvent.description,
+            date: editingEvent.date,
+            venue: editingEvent.venue,
+            category: editingEvent.category,
+            capacity: editingEvent.capacity,
+            imageUrl: editingEvent.imageUrl,
+          }}
+          currentBookings={editingEvent.capacity - editingEvent.seatsAvailable}
+          onCancel={() => setEditingEvent(null)}
+          onSubmit={handleEditSubmit}
+        />
       )}
     </section>
   )

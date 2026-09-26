@@ -17,12 +17,17 @@ export interface CampusEvent {
   seatsAvailable: number
   organizerId: string
   cancelled: boolean
+  imageUrl?: string
 }
 
 // "Today" for the seed data. Events before this are considered past.
 export const TODAY = new Date('2026-09-16T09:00:00')
 
-export const events: CampusEvent[] = [
+const globalForEvents = globalThis as unknown as {
+  campusEvents?: CampusEvent[]
+}
+
+const seedEvents: CampusEvent[] = [
   {
     id: 'evt-01',
     name: 'Hack the Campus 2026',
@@ -220,6 +225,9 @@ export const events: CampusEvent[] = [
   },
 ]
 
+export const events: CampusEvent[] = globalForEvents.campusEvents ?? seedEvents
+globalForEvents.campusEvents = events
+
 /** True when the event's date has already passed relative to TODAY. */
 export function isPastEvent(event: CampusEvent): boolean {
   return new Date(event.date).getTime() < TODAY.getTime()
@@ -228,6 +236,16 @@ export function isPastEvent(event: CampusEvent): boolean {
 /** True when there are no seats left. */
 export function isFullEvent(event: CampusEvent): boolean {
   return event.seatsAvailable <= 0
+}
+
+/** True when an event is open but seatsAvailable / capacity < 0.15 */
+export function isAlmostFull(event: CampusEvent): boolean {
+  return (
+    !isFullEvent(event) &&
+    !isPastEvent(event) &&
+    !event.cancelled &&
+    event.seatsAvailable / event.capacity < 0.15
+  )
 }
 
 /** Look up a single event by id, or undefined if it doesn't exist. */
@@ -282,6 +300,7 @@ export interface CreateEventInput {
   category: EventCategory
   capacity: number
   organizerId: string
+  imageUrl?: string
 }
 
 export function validateEventInput(data: Partial<CreateEventInput>, isEdit = false): void {
@@ -321,6 +340,7 @@ export function createEvent(input: CreateEventInput): CampusEvent {
     seatsAvailable: input.capacity,
     organizerId: input.organizerId,
     cancelled: false,
+    ...(input.imageUrl ? { imageUrl: input.imageUrl } : {}),
   }
   events.push(newEvent)
   return newEvent
@@ -358,6 +378,7 @@ export function updateEvent(
   if (updates.venue !== undefined) event.venue = updates.venue.trim()
   if (updates.category !== undefined) event.category = updates.category
   if (updates.cancelled !== undefined) event.cancelled = updates.cancelled
+  if (updates.imageUrl !== undefined) event.imageUrl = updates.imageUrl
 
   return event
 }

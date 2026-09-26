@@ -19,9 +19,19 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  // Start with seeded student Aditi Rao or load from localStorage
   const [currentUser, setCurrentUser] = useState<SafeUser | null>(() => {
-    return getSafeUser(users[0])
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('campus_connect_user')
+        if (stored) {
+          const parsed = JSON.parse(stored)
+          if (parsed && parsed.id) return parsed
+        }
+      } catch {
+        // Ignore
+      }
+    }
+    return null
   })
 
   useEffect(() => {
@@ -39,7 +49,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const login = async (emailOrId: string, password: string): Promise<SafeUser> => {
-    // Try calling /api/auth
     try {
       const res = await fetch('/api/auth', {
         method: 'POST',
@@ -51,16 +60,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error(data.error || 'Invalid credentials')
       }
       setCurrentUser(data.user)
-      localStorage.setItem('campus_connect_user', JSON.stringify(data.user))
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('campus_connect_user', JSON.stringify(data.user))
+      }
       return data.user
     } catch (err: any) {
-      // Fallback to local authentication
+      if (
+        err.message &&
+        (err.message.includes('Invalid') ||
+          err.message.includes('required') ||
+          err.message.includes('credentials'))
+      ) {
+        throw err
+      }
       const user = authenticateUser(emailOrId, password)
       if (!user) {
         throw new Error('Invalid email/ID or password')
       }
       setCurrentUser(user)
-      localStorage.setItem('campus_connect_user', JSON.stringify(user))
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('campus_connect_user', JSON.stringify(user))
+      }
       return user
     }
   }
@@ -68,7 +88,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     setCurrentUser(null)
     try {
-      localStorage.removeItem('campus_connect_user')
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('campus_connect_user')
+      }
     } catch {
       // Ignore
     }
@@ -91,12 +113,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error(data.error || 'Failed to create account')
       }
       setCurrentUser(data.user)
-      localStorage.setItem('campus_connect_user', JSON.stringify(data.user))
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('campus_connect_user', JSON.stringify(data.user))
+      }
       return data.user
     } catch (err: any) {
+      if (
+        err.message &&
+        (err.message.includes('exists') ||
+          err.message.includes('Password') ||
+          err.message.includes('required') ||
+          err.message.includes('Role') ||
+          err.message.includes('role'))
+      ) {
+        throw err
+      }
       const user = registerUser(name, email, password, role)
       setCurrentUser(user)
-      localStorage.setItem('campus_connect_user', JSON.stringify(user))
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('campus_connect_user', JSON.stringify(user))
+      }
       return user
     }
   }
