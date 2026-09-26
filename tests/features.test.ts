@@ -290,3 +290,130 @@ describe('Task 4 — Organizer Event Management & Seat Consistency', () => {
     }).toThrow('Unauthorized')
   })
 })
+
+describe('Authentication & Password Protection', () => {
+  it('authenticates valid student with password', async () => {
+    const { authenticateUser } = await import('@/data/auth')
+    const user = authenticateUser('student@campus.edu', 'student123')
+    expect(user).not.toBeNull()
+    expect(user?.id).toBe('stu-1')
+    expect(user?.role).toBe('student')
+    // Password must NEVER be exposed
+    expect((user as any).password).toBeUndefined()
+  })
+
+  it('authenticates valid organizer with password', async () => {
+    const { authenticateUser } = await import('@/data/auth')
+    const user = authenticateUser('organizer@campus.edu', 'organizer123')
+    expect(user).not.toBeNull()
+    expect(user?.id).toBe('org-1')
+    expect(user?.role).toBe('organizer')
+  })
+
+  it('rejects authentication with invalid password', async () => {
+    const { authenticateUser } = await import('@/data/auth')
+    const user = authenticateUser('student@campus.edu', 'wrongpassword')
+    expect(user).toBeNull()
+  })
+
+  it('allows registering a new student with unique password', async () => {
+    const { registerUser, authenticateUser } = await import('@/data/auth')
+    const newUser = registerUser('New Student', 'newstudent@campus.edu', 'mysecurepass', 'student')
+    expect(newUser.name).toBe('New Student')
+    expect(newUser.email).toBe('newstudent@campus.edu')
+    expect(newUser.role).toBe('student')
+    expect((newUser as any).password).toBeUndefined()
+
+    const authenticated = authenticateUser('newstudent@campus.edu', 'mysecurepass')
+    expect(authenticated).not.toBeNull()
+  })
+})
+
+describe('Automated Unique Ticket IDs & Attendee Disqualification', () => {
+  it('generates an automated unique ticket ID on registration', async () => {
+    const { createEvent } = await import('@/data/events')
+    const { registerStudentForEvent } = await import('@/data/registrations')
+
+    const evt = createEvent({
+      name: 'Ticket Generation Test Event',
+      description: 'Testing ticket IDs',
+      date: '2026-12-28T10:00:00',
+      venue: 'Hall E',
+      category: 'Tech',
+      capacity: 10,
+      organizerId: 'org-1',
+    })
+
+    const reg = registerStudentForEvent('stu-1', evt.id)
+    expect(reg.ticketId).toBeDefined()
+    expect(reg.ticketId.startsWith('CC-')).toBe(true)
+  })
+
+  it('allows organizer to view attendees with safe student details (no password)', async () => {
+    const { createEvent } = await import('@/data/events')
+    const { registerStudentForEvent, getEventAttendees } = await import('@/data/registrations')
+
+    const evt = createEvent({
+      name: 'Roster Test Event',
+      description: 'Testing attendee roster',
+      date: '2026-12-29T10:00:00',
+      venue: 'Hall F',
+      category: 'Career',
+      capacity: 10,
+      organizerId: 'org-1',
+    })
+
+    registerStudentForEvent('stu-1', evt.id)
+
+    const attendees = getEventAttendees(evt.id)
+    expect(attendees.length).toBe(1)
+    expect(attendees[0].studentName).toBe('Aditi Rao')
+    expect(attendees[0].studentEmail).toBe('student@campus.edu')
+    expect(attendees[0].ticketId).toBeDefined()
+    expect((attendees[0] as any).password).toBeUndefined()
+  })
+
+  it('allows organizer to disqualify an attendee and restores seat count', async () => {
+    const { createEvent } = await import('@/data/events')
+    const { registerStudentForEvent, disqualifyAttendee } = await import('@/data/registrations')
+
+    const evt = createEvent({
+      name: 'Disqualification Test Event',
+      description: 'Testing disqualification',
+      date: '2026-12-30T10:00:00',
+      venue: 'Hall G',
+      category: 'Workshop',
+      capacity: 5,
+      organizerId: 'org-1',
+    })
+
+    const reg = registerStudentForEvent('stu-1', evt.id)
+    expect(evt.seatsAvailable).toBe(4)
+
+    const disqualified = disqualifyAttendee(reg.id, 'org-1')
+    expect(disqualified.status).toBe('disqualified')
+    expect(evt.seatsAvailable).toBe(5)
+  })
+
+  it('rejects disqualification by unauthorized organizer', async () => {
+    const { createEvent } = await import('@/data/events')
+    const { registerStudentForEvent, disqualifyAttendee } = await import('@/data/registrations')
+
+    const evt = createEvent({
+      name: 'Unauthorized Disqualify Test Event',
+      description: 'Testing auth check',
+      date: '2026-12-31T10:00:00',
+      venue: 'Hall H',
+      category: 'Workshop',
+      capacity: 5,
+      organizerId: 'org-1',
+    })
+
+    const reg = registerStudentForEvent('stu-1', evt.id)
+
+    expect(() => {
+      disqualifyAttendee(reg.id, 'org-imposter')
+    }).toThrow('Unauthorized')
+  })
+})
+

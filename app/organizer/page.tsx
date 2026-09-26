@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useAuth } from '@/components/AuthProvider'
 import { events as initialEvents, CampusEvent, EventCategory, TODAY } from '@/data/events'
+import { AttendeeDetail } from '@/data/registrations'
 import EmptyState from '@/components/EmptyState'
 import StatusBadge from '@/components/StatusBadge'
 
@@ -39,6 +40,11 @@ export default function OrganizerPage() {
   const [eventsList, setEventsList] = useState<CampusEvent[]>(initialEvents)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [editingEvent, setEditingEvent] = useState<CampusEvent | null>(null)
+  const [viewingAttendeesEvent, setViewingAttendeesEvent] = useState<CampusEvent | null>(null)
+  const [attendees, setAttendees] = useState<AttendeeDetail[]>([])
+  const [loadingAttendees, setLoadingAttendees] = useState(false)
+  const [disqualifyingId, setDisqualifyingId] = useState<string | null>(null)
+
   const [formData, setFormData] = useState<EventFormData>(defaultFormData)
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
@@ -64,12 +70,17 @@ export default function OrganizerPage() {
     fetchEvents()
   }, [])
 
-  if (currentUser.role !== 'organizer') {
+  if (!currentUser || currentUser.role !== 'organizer') {
     return (
       <section className="shell" style={{ padding: '56px 0' }}>
         <EmptyState
-          title="This page is for organizers"
-          description="Switch to an organizer account from the top-right menu to manage events."
+          title="Organizer console access"
+          description="You must be logged in with an organizer account to manage events and attendees."
+          action={
+            <Link href="/login" className="btn btn-primary">
+              Sign In as Organizer
+            </Link>
+          }
         />
       </section>
     )
@@ -78,11 +89,10 @@ export default function OrganizerPage() {
   const myEvents = eventsList.filter((e) => e.organizerId === currentUser.id)
 
   const openCreateModal = () => {
-    // Default date to tomorrow
-    const tomorrow = new Date(TODAY)
-    tomorrow.setDate(tomorrow.getDate() + 7)
-    tomorrow.setHours(10, 0, 0, 0)
-    const isoString = tomorrow.toISOString().slice(0, 16)
+    const nextWeek = new Date(TODAY)
+    nextWeek.setDate(nextWeek.getDate() + 7)
+    nextWeek.setHours(10, 0, 0, 0)
+    const isoString = nextWeek.toISOString().slice(0, 16)
 
     setFormData({
       ...defaultFormData,
@@ -103,6 +113,75 @@ export default function OrganizerPage() {
       capacity: event.capacity,
     })
     setFormError(null)
+  }
+
+  const openAttendeesModal = async (event: CampusEvent) => {
+    setViewingAttendeesEvent(event)
+    setLoadingAttendees(true)
+    try {
+      const res = await fetch(`/api/events/${event.id}/attendees?organizerId=${currentUser.id}`)
+      const data = await res.json()
+      if (data.success && Array.isArray(data.attendees)) {
+        setAttendees(data.attendees)
+      } else {
+        setAttendees([])
+      }
+    } catch {
+      setAttendees([])
+    } finally {
+      setLoadingAttendees(false)
+    }
+  }
+
+  const handleDisqualify = async (registrationId: string, studentName: string) => {
+    if (!viewingAttendeesEvent) return
+    if (!confirm(`Are you sure you want to disqualify/remove ${studentName} from "${viewingAttendeesEvent.name}"? Their seat will be restored.`)) {
+      return
+    }
+
+    setDisqualifyingId(registrationId)
+    try {
+      const res = await fetch(`/api/events/${viewingAttendeesEvent.id}/attendees`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'disqualify',
+          registrationId,
+          organizerId: currentUser.id,
+        }),
+      })
+
+      const data = await res.json()
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to disqualify attendee')
+      }
+
+      // Update attendees list
+      setAttendees((prev) =>
+        prev.map((a) => (a.id === registrationId ? { ...a, status: 'disqualified' } : a)),
+      )
+
+      // Restore seat in events list
+      setEventsList((prev) =>
+        prev.map((e) =>
+          e.id === viewingAttendeesEvent.id
+            ? { ...e, seatsAvailable: Math.min(e.capacity, e.seatsAvailable + 1) }
+            : e,
+        ),
+      )
+
+      setFeedback({
+        type: 'success',
+        message: `${studentName} has been disqualified. 1 seat has been restored.`,
+      })
+    } catch (err: any) {
+      setFeedback({
+        type: 'error',
+        message: err.message || 'Error disqualifying attendee',
+      })
+    } finally {
+      setDisqualifyingId(null)
+    }
   }
 
   const handleCreateSubmit = async (e: React.FormEvent) => {
@@ -255,7 +334,7 @@ export default function OrganizerPage() {
           <span className="eyebrow-tag">organizer console</span>
           <h1 style={{ fontSize: 30, marginTop: 10 }}>Manage your events</h1>
           <p style={{ marginTop: 8 }}>
-            Create new events, modify capacities and venues, or cancel events.
+            Post events, modify details, monitor attendees, or disqualify registrants.
           </p>
         </div>
         <button
@@ -318,6 +397,8 @@ export default function OrganizerPage() {
               : event.seatsAvailable <= 0
                 ? 'full'
                 : 'open'
+            const bookedCount = event.capacity - event.seatsAvailable
+
             return (
               <li
                 key={event.id}
@@ -356,23 +437,36 @@ export default function OrganizerPage() {
                       year: 'numeric',
                     })}{' '}
                     · {event.venue} · {event.seatsAvailable}/{event.capacity}{' '}
-                    seats
+                    seats available
                   </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                   <StatusBadge status={status} />
+                  
                   <button
                     type="button"
                     className="btn btn-secondary"
+                    style={{ fontSize: 13, padding: '6px 12px' }}
+                    onClick={() => openAttendeesModal(event)}
+                    title="View registered students and manage disqualifications"
+                  >
+                    👥 Attendees ({bookedCount})
+                  </button>
+
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ fontSize: 13, padding: '6px 12px' }}
                     onClick={() => openEditModal(event)}
                   >
                     Edit
                   </button>
+
                   {!event.cancelled && (
                     <button
                       type="button"
                       className="btn btn-secondary"
-                      style={{ color: 'var(--rust)' }}
+                      style={{ fontSize: 13, padding: '6px 12px', color: 'var(--rust)' }}
                       onClick={() => handleCancelEvent(event)}
                     >
                       Cancel
@@ -383,6 +477,165 @@ export default function OrganizerPage() {
             )
           })}
         </ul>
+      )}
+
+      {/* Attendees Management Modal */}
+      {viewingAttendeesEvent && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="attendees-modal-title"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 100,
+            padding: 16,
+          }}
+        >
+          <div
+            className="card-surface"
+            style={{
+              padding: 28,
+              maxWidth: 680,
+              width: '100%',
+              maxHeight: '85vh',
+              overflowY: 'auto',
+              boxShadow: '0 8px 30px rgba(0,0,0,0.18)',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+              <div>
+                <span className="eyebrow-tag" style={{ marginBottom: 6 }}>
+                  attendee roster
+                </span>
+                <h2 id="attendees-modal-title" style={{ fontSize: 22, marginTop: 4 }}>
+                  {viewingAttendeesEvent.name}
+                </h2>
+                <p style={{ fontSize: 13.5 }}>
+                  {viewingAttendeesEvent.capacity - viewingAttendeesEvent.seatsAvailable} registered · {viewingAttendeesEvent.seatsAvailable} seats remaining
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewingAttendeesEvent(null)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: 20,
+                  cursor: 'pointer',
+                  color: 'var(--ink-soft)',
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {loadingAttendees ? (
+              <div style={{ padding: '30px 0', textAlign: 'center', color: 'var(--ink-soft)' }}>
+                Loading attendee records…
+              </div>
+            ) : attendees.length === 0 ? (
+              <div style={{ padding: '30px 0', textAlign: 'center', color: 'var(--ink-soft)' }}>
+                No students have registered for this event yet.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {attendees.map((attendee) => (
+                  <div
+                    key={attendee.id}
+                    style={{
+                      padding: '12px 16px',
+                      borderRadius: 'var(--radius)',
+                      border: '1px solid var(--line)',
+                      background: attendee.status === 'disqualified' ? 'var(--rust-bg)' : 'var(--paper)',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: 12,
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontWeight: 600, fontSize: 15 }}>
+                          {attendee.studentName}
+                        </span>
+                        <span
+                          style={{
+                            fontFamily: 'var(--font-mono)',
+                            fontSize: 11.5,
+                            background: 'var(--slate-bg)',
+                            padding: '2px 6px',
+                            borderRadius: 'var(--radius)',
+                          }}
+                        >
+                          Ticket: {attendee.ticketId}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 12.5, color: 'var(--ink-soft)', marginTop: 3 }}>
+                        ID: {attendee.studentId} · Email: {attendee.studentEmail} · Registered: {new Date(attendee.registeredAt).toLocaleDateString('en-IN')}
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span
+                        style={{
+                          fontSize: 12,
+                          fontFamily: 'var(--font-mono)',
+                          padding: '3px 8px',
+                          borderRadius: 999,
+                          background:
+                            attendee.status === 'confirmed'
+                              ? 'var(--green-bg)'
+                              : 'var(--rust-bg)',
+                          color:
+                            attendee.status === 'confirmed'
+                              ? 'var(--green)'
+                              : 'var(--rust)',
+                          textTransform: 'capitalize',
+                        }}
+                      >
+                        {attendee.status}
+                      </span>
+
+                      {attendee.status === 'confirmed' && (
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          style={{
+                            fontSize: 12,
+                            padding: '4px 10px',
+                            color: 'var(--rust)',
+                            borderColor: 'var(--rust)',
+                          }}
+                          disabled={disqualifyingId === attendee.id}
+                          onClick={() => handleDisqualify(attendee.id, attendee.studentName)}
+                          title="Disqualify/remove student from event and restore seat"
+                        >
+                          {disqualifyingId === attendee.id ? 'Removing…' : 'Disqualify'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 20 }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setViewingAttendeesEvent(null)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Create / Edit Modal */}

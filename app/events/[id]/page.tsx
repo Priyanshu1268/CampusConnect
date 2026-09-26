@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import {
   getEventById,
   isPastEvent,
@@ -34,11 +35,14 @@ export default function EventDetailPage({
 }: {
   params: { id: string }
 }) {
+  const router = useRouter()
   const { currentUser } = useAuth()
   const [event, setEvent] = useState<CampusEvent | undefined>(() =>
     getEventById(params.id),
   )
   const [isRegistered, setIsRegistered] = useState(false)
+  const [registeredTicketId, setRegisteredTicketId] = useState<string | null>(null)
+  const [isDisqualified, setIsDisqualified] = useState(false)
   const [showModal, setShowModal] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [feedback, setFeedback] = useState<{
@@ -58,28 +62,42 @@ export default function EventDetailPage({
       .catch(() => {})
 
     if (currentUser && currentUser.role === 'student') {
-      fetch(`/api/registrations?studentId=${currentUser.id}`)
+      fetch(`/api/registrations?studentId=${currentUser.id}&activeOnly=false`)
         .then((res) => res.json())
         .then((data) => {
           if (data.success && Array.isArray(data.registrations)) {
-            const hasReg = data.registrations.some(
-              (r: any) => r.eventId === params.id && r.status === 'confirmed',
+            const myReg = data.registrations.find(
+              (r: any) => r.eventId === params.id,
             )
-            setIsRegistered(hasReg)
+            if (myReg) {
+              if (myReg.status === 'confirmed') {
+                setIsRegistered(true)
+                setRegisteredTicketId(myReg.ticketId)
+              } else if (myReg.status === 'disqualified') {
+                setIsDisqualified(true)
+              }
+            } else {
+              setIsRegistered(false)
+              setIsDisqualified(false)
+            }
           }
         })
         .catch(() => {
-          // Fallback to in-memory store
-          const hasReg = registrations.some(
-            (r) =>
-              r.eventId === params.id &&
-              r.studentId === currentUser.id &&
-              r.status === 'confirmed',
+          const myReg = registrations.find(
+            (r) => r.eventId === params.id && r.studentId === currentUser.id,
           )
-          setIsRegistered(hasReg)
+          if (myReg) {
+            if (myReg.status === 'confirmed') {
+              setIsRegistered(true)
+              setRegisteredTicketId(myReg.ticketId)
+            } else if (myReg.status === 'disqualified') {
+              setIsDisqualified(true)
+            }
+          }
         })
     } else {
       setIsRegistered(false)
+      setIsDisqualified(false)
     }
   }, [params.id, currentUser])
 
@@ -100,7 +118,7 @@ export default function EventDetailPage({
   }
 
   // Hide cancelled events from students
-  if (event.cancelled && currentUser.role === 'student') {
+  if (event.cancelled && currentUser?.role === 'student') {
     return (
       <section className="shell" style={{ padding: '56px 0' }}>
         <EmptyState
@@ -126,11 +144,16 @@ export default function EventDetailPage({
         ? 'full'
         : 'open'
 
-  const isStudent = currentUser.role === 'student'
-  const canRegister = isStudent && !past && !full && !event.cancelled && !isRegistered
+  const isStudent = currentUser?.role === 'student'
+  const canRegister = isStudent && !past && !full && !event.cancelled && !isRegistered && !isDisqualified
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!currentUser) {
+      router.push('/login')
+      return
+    }
+
     setSubmitting(true)
     setFeedback(null)
 
@@ -150,6 +173,8 @@ export default function EventDetailPage({
       }
 
       setIsRegistered(true)
+      const ticket = data.registration?.ticketId || 'CONFIRMED'
+      setRegisteredTicketId(ticket)
       setEvent((prev) =>
         prev
           ? {
@@ -160,7 +185,7 @@ export default function EventDetailPage({
       )
       setFeedback({
         type: 'success',
-        message: 'Successfully registered! See details under My Registrations.',
+        message: `Successfully registered! Your Ticket ID is: ${ticket}`,
       })
       setShowModal(false)
     } catch (err: any) {
@@ -254,22 +279,46 @@ export default function EventDetailPage({
             value={`${event.seatsAvailable} of ${event.capacity} available`}
           />
 
-          {isRegistered ? (
+          {!currentUser ? (
+            <div style={{ marginTop: 8 }}>
+              <Link href="/login" className="btn btn-primary" style={{ width: '100%', textAlign: 'center' }}>
+                Sign in to Register
+              </Link>
+            </div>
+          ) : isDisqualified ? (
+            <div
+              style={{
+                marginTop: 8,
+                padding: '10px 14px',
+                borderRadius: 'var(--radius)',
+                background: 'var(--rust-bg)',
+                color: 'var(--rust)',
+                fontSize: 13.5,
+                fontWeight: 600,
+              }}
+            >
+              ⚠ Disqualified by event organizer
+            </div>
+          ) : isRegistered ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
               <div
                 style={{
                   display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '8px 12px',
+                  flexDirection: 'column',
+                  gap: 4,
+                  padding: '10px 14px',
                   borderRadius: 'var(--radius)',
                   background: 'var(--green-bg)',
                   color: 'var(--green)',
                   fontSize: 13.5,
-                  fontWeight: 600,
                 }}
               >
-                <span>✓ You are registered for this event</span>
+                <div style={{ fontWeight: 600 }}>✓ Registered</div>
+                {registeredTicketId && (
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12.5 }}>
+                    Ticket: <strong>{registeredTicketId}</strong>
+                  </div>
+                )}
               </div>
               <Link href="/registrations" className="btn btn-secondary" style={{ textAlign: 'center' }}>
                 View in My Registrations
@@ -313,7 +362,7 @@ export default function EventDetailPage({
       </div>
 
       {/* Registration Confirmation Modal */}
-      {showModal && (
+      {showModal && currentUser && (
         <div
           role="dialog"
           aria-modal="true"
@@ -363,6 +412,9 @@ export default function EventDetailPage({
               <div><strong>Date:</strong> {formatDate(event.date)} at {formatTime(event.date)}</div>
               <div><strong>Venue:</strong> {event.venue}</div>
               <div><strong>Seats remaining:</strong> {event.seatsAvailable}</div>
+              <div style={{ color: 'var(--ink-soft)', fontSize: 12.5, marginTop: 4 }}>
+                ℹ A unique automated Ticket ID will be assigned upon confirmation.
+              </div>
             </div>
 
             <form onSubmit={handleRegister} style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 8 }}>

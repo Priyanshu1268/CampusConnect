@@ -1,19 +1,20 @@
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap');
 
 :root {
-  /* Color */
-  --ink: #211f1c;
-  --ink-soft: #55524a;
-  --paper: #faf8f3;
+  /* Color Palette: #659287, #88BDA4, #B1D3B9, #E6F2DD */
+  --ink: #192723;
+  --ink-soft: #4a635c;
+  --paper: #f4f8f2;
   --paper-raised: #ffffff;
-  --line: #ddd6c6;
-  --amber: #dd9425;
-  --amber-ink: #6b4a0e;
-  --green: #3c7a5c;
-  --green-bg: #e4efe7;
+  --line: #B1D3B9;
+  --amber: #659287;
+  --amber-ink: #2b4942;
+  --green: #48786d;
+  --green-bg: #E6F2DD;
   --rust: #b0472c;
   --rust-bg: #f6e6e1;
-  --slate-bg: #ecece6;
+  --slate-bg: #dceada;
+  --accent: #88BDA4;
 
   /* Type */
   --font-display: 'Space Grotesk', 'Segoe UI', sans-serif;
@@ -102,8 +103,8 @@ img {
   font-family: var(--font-mono);
   font-size: 12px;
   color: var(--amber-ink);
-  background: #fbecd2;
-  border: 1px solid #ecd6a6;
+  background: var(--green-bg);
+  border: 1px solid var(--line);
   padding: 3px 9px;
   border-radius: 999px;
   width: fit-content;
@@ -119,7 +120,7 @@ img {
   font-size: 14.5px;
   padding: 11px 20px;
   border-radius: var(--radius);
-  border: 1.5px solid var(--ink);
+  border: 1.5px solid var(--amber);
   cursor: pointer;
   text-decoration: none;
   transition:
@@ -133,22 +134,23 @@ img {
 }
 
 .btn-primary {
-  background: var(--ink);
-  color: var(--paper);
+  background: var(--amber);
+  color: #ffffff;
 }
 
 .btn-primary:hover {
-  background: #3a362f;
+  background: #527c72;
 }
 
 .btn-secondary {
   background: transparent;
   color: var(--ink);
+  border-color: var(--line);
 }
 
 .btn-secondary:hover {
-  background: var(--ink);
-  color: var(--paper);
+  background: var(--green-bg);
+  color: var(--ink);
 }
 
 .btn[disabled] {
@@ -187,8 +189,8 @@ img {
 
 .event-card:hover,
 .event-card:focus-visible {
-  border-color: var(--ink);
-  box-shadow: 3px 3px 0 var(--ink);
+  border-color: var(--amber);
+  box-shadow: 3px 3px 0 var(--amber);
 }
 
 .event-card__main {

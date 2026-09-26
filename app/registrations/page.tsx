@@ -45,12 +45,17 @@ export default function RegistrationsPage() {
     fetchRegistrations()
   }, [currentUser])
 
-  if (currentUser.role !== 'student') {
+  if (!currentUser || currentUser.role !== 'student') {
     return (
       <section className="shell" style={{ padding: '56px 0' }}>
         <EmptyState
-          title="This page is for students"
-          description="Switch to a student account from the top-right menu to see registered events."
+          title="Student login required"
+          description="Sign in to your student account to view and manage registered campus events."
+          action={
+            <Link href="/login" className="btn btn-primary">
+              Sign In as Student
+            </Link>
+          }
         />
       </section>
     )
@@ -73,8 +78,8 @@ export default function RegistrationsPage() {
     return event && isPastEvent(event) && reg.status === 'confirmed'
   })
 
-  const cancelledRegistrations = visibleRegistrations.filter(
-    (reg) => reg.status === 'cancelled',
+  const inactiveRegistrations = visibleRegistrations.filter(
+    (reg) => reg.status === 'cancelled' || reg.status === 'disqualified',
   )
 
   const handleCancelRegistration = async (id: string) => {
@@ -126,22 +131,37 @@ export default function RegistrationsPage() {
       }}
     >
       <div>
-        <Link
-          href={`/events/${event.id}`}
-          style={{
-            fontFamily: 'var(--font-display)',
-            fontWeight: 600,
-            fontSize: 17,
-            textDecoration: 'none',
-          }}
-        >
-          {event.name}
-        </Link>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <Link
+            href={`/events/${event.id}`}
+            style={{
+              fontFamily: 'var(--font-display)',
+              fontWeight: 600,
+              fontSize: 17,
+              textDecoration: 'none',
+            }}
+          >
+            {event.name}
+          </Link>
+          <span
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 12,
+              background: 'var(--slate-bg)',
+              color: 'var(--ink)',
+              padding: '2px 8px',
+              borderRadius: 'var(--radius)',
+              border: '1px solid var(--line)',
+            }}
+          >
+            Ticket: {reg.ticketId || 'CONFIRMED'}
+          </span>
+        </div>
         <div
           style={{
             fontSize: 13.5,
             color: 'var(--ink-soft)',
-            marginTop: 4,
+            marginTop: 5,
           }}
         >
           {new Date(event.date).toLocaleDateString('en-IN', {
@@ -154,15 +174,31 @@ export default function RegistrationsPage() {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <StatusBadge
-          status={
-            reg.status === 'cancelled'
-              ? 'cancelled'
-              : isPastEvent(event)
-                ? 'past'
-                : 'open'
-          }
-        />
+        {reg.status === 'disqualified' ? (
+          <span
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 12,
+              padding: '3px 8px',
+              borderRadius: 999,
+              background: 'var(--rust-bg)',
+              color: 'var(--rust)',
+            }}
+          >
+            Disqualified
+          </span>
+        ) : (
+          <StatusBadge
+            status={
+              reg.status === 'cancelled'
+                ? 'cancelled'
+                : isPastEvent(event)
+                  ? 'past'
+                  : 'open'
+            }
+          />
+        )}
+
         {isUpcoming && reg.status === 'confirmed' && (
           <button
             type="button"
@@ -182,7 +218,7 @@ export default function RegistrationsPage() {
   const hasAnyRegistrations =
     upcomingRegistrations.length > 0 ||
     pastRegistrations.length > 0 ||
-    cancelledRegistrations.length > 0
+    inactiveRegistrations.length > 0
 
   return (
     <section className="shell" style={{ padding: '40px 0 64px' }}>
@@ -190,7 +226,7 @@ export default function RegistrationsPage() {
         <span className="eyebrow-tag">signed up as {currentUser.name}</span>
         <h1 style={{ fontSize: 30, marginTop: 10 }}>My registrations</h1>
         <p style={{ marginTop: 8 }}>
-          View and manage all events you have signed up for.
+          View your upcoming tickets, registration history, and event details.
         </p>
       </div>
 
@@ -235,7 +271,7 @@ export default function RegistrationsPage() {
       {!hasAnyRegistrations ? (
         <EmptyState
           title="No registrations yet"
-          description="Once you register for an event, it'll show up here."
+          description="Once you register for an event, your tickets will show up here."
           action={
             <Link href="/events" className="btn btn-primary">
               Browse events
@@ -280,8 +316,8 @@ export default function RegistrationsPage() {
             </div>
           )}
 
-          {/* Cancelled Registrations */}
-          {cancelledRegistrations.length > 0 && (
+          {/* Cancelled / Disqualified Registrations */}
+          {inactiveRegistrations.length > 0 && (
             <details style={{ marginTop: 8 }}>
               <summary
                 style={{
@@ -292,7 +328,7 @@ export default function RegistrationsPage() {
                   userSelect: 'none',
                 }}
               >
-                Cancelled Registrations ({cancelledRegistrations.length})
+                Cancelled & Disqualified History ({inactiveRegistrations.length})
               </summary>
               <ul
                 style={{
@@ -302,7 +338,7 @@ export default function RegistrationsPage() {
                   marginTop: 14,
                 }}
               >
-                {cancelledRegistrations.map((reg) => {
+                {inactiveRegistrations.map((reg) => {
                   const event = getEventById(reg.eventId)
                   if (!event) return null
                   return renderRegistrationItem(reg, event, false)
