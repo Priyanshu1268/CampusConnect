@@ -1,5 +1,6 @@
-import { getEventById, isPastEvent } from './events'
+import { getEventById, isPastEvent, events } from './events'
 import { getUserById } from './auth'
+import { loadStoreArray, saveStoreArray } from './storage'
 
 export type RegistrationStatus = 'confirmed' | 'cancelled' | 'disqualified'
 
@@ -50,7 +51,8 @@ const seedRegistrations: Registration[] = [
 ]
 
 export const registrations: Registration[] =
-  globalForRegs.campusRegistrations ?? seedRegistrations
+  globalForRegs.campusRegistrations ??
+  loadStoreArray('registrations', seedRegistrations)
 globalForRegs.campusRegistrations = registrations
 
 /** Simple lookup used by the placeholder "My Registrations" page. */
@@ -128,6 +130,8 @@ export function registerStudentForEvent(
   }
 
   registrations.push(newReg)
+  saveStoreArray('registrations', registrations)
+  saveStoreArray('events', events)
   return newReg
 }
 
@@ -155,6 +159,8 @@ export function cancelRegistration(
     event.seatsAvailable = Math.min(event.capacity, event.seatsAvailable + 1)
   }
 
+  saveStoreArray('registrations', registrations)
+  saveStoreArray('events', events)
   return reg
 }
 
@@ -190,6 +196,8 @@ export function disqualifyAttendee(
   }
 
   reg.status = 'disqualified'
+  saveStoreArray('registrations', registrations)
+  saveStoreArray('events', events)
   return reg
 }
 

@@ -1,3 +1,5 @@
+import { loadStoreArray, saveStoreArray } from './storage'
+
 export type EventCategory =
   | 'Tech'
   | 'Cultural'
@@ -225,7 +227,8 @@ const seedEvents: CampusEvent[] = [
   },
 ]
 
-export const events: CampusEvent[] = globalForEvents.campusEvents ?? seedEvents
+export const events: CampusEvent[] =
+  globalForEvents.campusEvents ?? loadStoreArray('events', seedEvents)
 globalForEvents.campusEvents = events
 
 /** True when the event's date has already passed relative to TODAY. */
@@ -343,6 +346,7 @@ export function createEvent(input: CreateEventInput): CampusEvent {
     ...(input.imageUrl ? { imageUrl: input.imageUrl } : {}),
   }
   events.push(newEvent)
+  saveStoreArray('events', events)
   return newEvent
 }
 
@@ -380,6 +384,7 @@ export function updateEvent(
   if (updates.cancelled !== undefined) event.cancelled = updates.cancelled
   if (updates.imageUrl !== undefined) event.imageUrl = updates.imageUrl
 
+  saveStoreArray('events', events)
   return event
 }
 
@@ -392,5 +397,6 @@ export function cancelEvent(id: string, organizerId: string): CampusEvent {
     throw new Error('Unauthorized: only the event organizer can cancel this event')
   }
   event.cancelled = true
+  saveStoreArray('events', events)
   return event
 }

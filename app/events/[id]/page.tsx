@@ -41,6 +41,7 @@ export default function EventDetailPage({
   const [event, setEvent] = useState<CampusEvent | undefined>(() =>
     getEventById(params.id),
   )
+  const [loading, setLoading] = useState(!getEventById(params.id))
   const [isRegistered, setIsRegistered] = useState(false)
   const [registeredTicketId, setRegisteredTicketId] = useState<string | null>(null)
   const [isDisqualified, setIsDisqualified] = useState(false)
@@ -53,7 +54,7 @@ export default function EventDetailPage({
 
   // Fetch fresh event data and registration status
   useEffect(() => {
-    fetch(`/api/events/${params.id}`)
+    fetch(`/api/events/${params.id}?_t=${Date.now()}`, { cache: 'no-store' })
       .then((res) => res.json())
       .then((data) => {
         if (data.success && data.event) {
@@ -61,6 +62,9 @@ export default function EventDetailPage({
         }
       })
       .catch(() => {})
+      .finally(() => {
+        setLoading(false)
+      })
 
     if (currentUser && currentUser.role === 'student') {
       fetch(`/api/registrations?studentId=${currentUser.id}&activeOnly=false`)
@@ -101,6 +105,14 @@ export default function EventDetailPage({
       setIsDisqualified(false)
     }
   }, [params.id, currentUser])
+
+  if (loading && !event) {
+    return (
+      <section className="shell" style={{ padding: '56px 0', textAlign: 'center' }}>
+        <p style={{ fontSize: 16, color: 'var(--ink-soft)' }}>Loading event details…</p>
+      </section>
+    )
+  }
 
   if (!event) {
     return (

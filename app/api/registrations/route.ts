@@ -7,6 +7,8 @@ import {
 } from '@/data/registrations'
 import { getUserById } from '@/data/auth'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const studentId = searchParams.get('studentId')
@@ -23,7 +25,14 @@ export async function GET(request: Request) {
     ? getActiveRegistrationsForStudent(studentId)
     : getRegistrationsForStudent(studentId)
 
-  return NextResponse.json({ success: true, registrations: result })
+  return NextResponse.json(
+    { success: true, registrations: result },
+    {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+      },
+    },
+  )
 }
 
 export async function POST(request: Request) {

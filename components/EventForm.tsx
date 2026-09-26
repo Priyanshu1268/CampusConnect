@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { EventCategory } from '@/data/events'
+import { EventCategory, TODAY } from '@/data/events'
 
 const CATEGORIES: EventCategory[] = [
   'Tech',
@@ -41,10 +41,18 @@ export default function EventForm({
   submitLabel = 'Save Event',
   currentBookings,
 }: EventFormProps) {
+  const getDefaultDate = () => {
+    if (initialValues?.date) return initialValues.date.slice(0, 16)
+    const d = new Date(TODAY)
+    d.setDate(d.getDate() + 7)
+    d.setHours(14, 0, 0, 0)
+    return d.toISOString().slice(0, 16)
+  }
+
   const [formData, setFormData] = useState<EventFormValues>({
     name: initialValues?.name || '',
     description: initialValues?.description || '',
-    date: initialValues?.date ? initialValues.date.slice(0, 16) : '',
+    date: getDefaultDate(),
     venue: initialValues?.venue || '',
     category: initialValues?.category || 'Tech',
     capacity: initialValues?.capacity ?? 50,
@@ -99,6 +107,13 @@ export default function EventForm({
     }
     if (!formData.date) {
       setError('Date is required')
+      return
+    }
+    const eventTime = new Date(formData.date).getTime()
+    if (isNaN(eventTime) || eventTime <= TODAY.getTime()) {
+      setError(
+        'Event date must be in the future (after September 16, 2026 for the current academic semester)',
+      )
       return
     }
     const cap = Number(formData.capacity)
@@ -324,11 +339,15 @@ export default function EventForm({
 
           <div>
             <label style={{ display: 'block', fontSize: 13.5, fontWeight: 500, marginBottom: 4 }}>
-              Date & Time *
+              Date & Time *{' '}
+              <span style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 400 }}>
+                (Semester timeline: after Sep 16, 2026)
+              </span>
             </label>
             <input
               type="datetime-local"
               required
+              min="2026-09-17T00:00"
               value={formData.date}
               onChange={(e) => setFormData({ ...formData, date: e.target.value })}
               style={{

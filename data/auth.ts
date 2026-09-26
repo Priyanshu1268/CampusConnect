@@ -1,3 +1,5 @@
+import { loadStoreArray, saveStoreArray } from './storage'
+
 export type UserRole = 'student' | 'organizer'
 
 export interface AppUser {
@@ -31,7 +33,8 @@ const seedUsers: AppUser[] = [
   },
 ]
 
-export const users: AppUser[] = globalForAuth.campusUsers ?? seedUsers
+export const users: AppUser[] =
+  globalForAuth.campusUsers ?? loadStoreArray('users', seedUsers)
 globalForAuth.campusUsers = users
 
 export function getUserById(id: string): AppUser | undefined {
@@ -94,5 +97,6 @@ export function registerUser(
   }
 
   users.push(newUser)
+  saveStoreArray('users', users)
   return getSafeUser(newUser)
 }

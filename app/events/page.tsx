@@ -31,16 +31,22 @@ export default function EventsPage() {
   const [sortBy, setSortBy] = useState<SortOption>('date-asc')
 
   useEffect(() => {
-    fetch('/api/events?upcoming=true&forStudent=true')
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.success && Array.isArray(data.events)) {
-          setEventList(data.events)
-        }
+    const fetchLatestEvents = () => {
+      fetch(`/api/events?upcoming=true&forStudent=true&_t=${Date.now()}`, {
+        cache: 'no-store',
       })
-      .catch(() => {
-        // Fallback to in-memory store
-      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && Array.isArray(data.events)) {
+            setEventList(data.events)
+          }
+        })
+        .catch(() => {})
+    }
+
+    fetchLatestEvents()
+    window.addEventListener('focus', fetchLatestEvents)
+    return () => window.removeEventListener('focus', fetchLatestEvents)
   }, [])
 
   // Hide past events and cancelled events from student discovery

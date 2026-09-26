@@ -3,6 +3,8 @@ import { updateEvent, cancelEvent, getEventById } from '@/data/events'
 import { getUserById } from '@/data/auth'
 import { countActiveRegistrations } from '@/data/registrations'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(
   _request: Request,
   { params }: { params: { id: string } },
@@ -14,7 +16,14 @@ export async function GET(
       { status: 404 },
     )
   }
-  return NextResponse.json({ success: true, event })
+  return NextResponse.json(
+    { success: true, event },
+    {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+      },
+    },
+  )
 }
 
 export async function PATCH(

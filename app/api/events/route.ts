@@ -9,6 +9,8 @@ import {
 } from '@/data/events'
 import { getUserById } from '@/data/auth'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const upcomingOnly = searchParams.get('upcoming') !== 'false'
@@ -34,7 +36,14 @@ export async function GET(request: Request) {
     list = filterEventsByCategory(list, category)
   }
 
-  return NextResponse.json({ success: true, events: list })
+  return NextResponse.json(
+    { success: true, events: list },
+    {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+      },
+    },
+  )
 }
 
 export async function POST(request: Request) {
